@@ -148,3 +148,42 @@ async def test_async_delete_grid(fake):
     item = await grid.add("x")
     await grid.delete_grid()
     assert KEY not in fake.grids and grid.index.get(grid._core.name, item.id) is None
+
+
+def test_search_waits_for_new_items(fake, monkeypatch):
+    pauses = []
+    monkeypatch.setattr("hashgrid.dna.grid.time.sleep", pauses.append)
+    fake.lag = 2  # DNA misses a new item for two searches, as before a tick
+    grid = _grid(fake)
+    grid.add("the quick brown fox", key="/fox")
+    _, results = grid.ask("quick fox")
+    assert [r.key for r in results] == ["/fox"] and pauses == [0.1, 0.2]
+    pauses.clear()
+    q = grid.query("nothing")
+    grid.search(q, k=2)  # the fox, then nothing left: waits up to 0.5 s in all
+    assert pauses == [0.1, 0.2, 0.2]
+    pauses.clear()
+    assert grid.search(q, k=1, wait=0) == [] and pauses == []
+
+
+def test_backoff():
+    from hashgrid.dna.grid import _backoff
+
+    assert _backoff(0.5) == [0.1, 0.2, 0.2]
+    assert _backoff(0) == []
+    assert sum(_backoff(1.0)) == pytest.approx(1.0)
+
+
+@pytest.mark.anyio
+async def test_async_search_waits_for_new_items(fake, monkeypatch):
+    pauses = []
+
+    async def sleep(t):
+        pauses.append(t)
+
+    monkeypatch.setattr("hashgrid.dna.grid.asyncio.sleep", sleep)
+    fake.lag = 1
+    grid = AsyncGrid(Index(HashEmbedder(), path=":memory:"), AsyncDNA(KEY, base_url=URL, transport=fake.transport()))
+    await grid.add("hello", key="/h")
+    _, results = await grid.ask("hello")
+    assert [r.key for r in results] == ["/h"] and pauses == [0.1]

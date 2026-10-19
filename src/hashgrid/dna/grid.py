@@ -12,6 +12,7 @@ embeds on your machine and keeps the content; DNA gets the vectors only.
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any, Iterable, Mapping, Sequence
 
 from ..errors import Conflict, ModelMismatch
@@ -20,6 +21,20 @@ from ..index.content import Content, content_key, same
 from ..index.embedders import Kind
 from .client import DNA, AsyncDNA, _id, acreate_grid, create_grid
 from .models import Edge, GridKey, Item, Node, Result
+
+
+WAIT = 0.5  # how long a search waits for items DNA has not indexed yet, in seconds
+
+
+def _backoff(wait: float) -> list[float]:
+    """The pauses before retrying a search that found nothing: DNA indexes
+    new nodes on its next tick, a tenth of a second or so after they are added."""
+    pauses, step = [], 0.1
+    while wait > 1e-9:
+        pauses.append(min(step, wait))
+        wait -= pauses[-1]
+        step *= 2
+    return pauses
 
 
 def _pairs(
@@ -137,20 +152,31 @@ class Grid:
         self._core.index.put(self._core.name or "", node.id, None, content)
         return Item(node.id, None, content)
 
-    def search(self, query: str | Item, k: int = 1, prefix: str = "") -> list[Result]:
+    def search(
+        self, query: str | Item, k: int = 1, prefix: str = "", *, wait: float = WAIT
+    ) -> list[Result]:
         """The next ``k`` results of ``query`` not shown before, best first,
-        among items whose key starts with ``prefix``; fewer when none are left."""
+        among items whose key starts with ``prefix``; fewer when none are left.
+        When DNA finds nothing it may not have indexed the latest items yet, so
+        it is asked again for up to ``wait`` seconds."""
         edges: list[Edge] = []
-        while len(edges) < k and (edge := self.dna.create_edge(query, prefix)):
+        pauses = _backoff(wait)
+        while len(edges) < k:
+            edge = self.dna.create_edge(query, prefix)
+            if edge is None:
+                if not pauses:
+                    break
+                time.sleep(pauses.pop(0))
+                continue
             edges.append(edge)
         return [self._result(e) for e in edges]
 
     def ask(
-        self, content: Content, k: int = 1, prefix: str = ""
+        self, content: Content, k: int = 1, prefix: str = "", *, wait: float = WAIT
     ) -> tuple[Item, list[Result]]:
         """A query from ``content`` and its first ``k`` results."""
         query = self.query(content)
-        return query, self.search(query, k, prefix)
+        return query, self.search(query, k, prefix, wait=wait)
 
     def score(self, query: str | Item, item: str | Item, score: float) -> Result:
         """Score how well ``item`` fits ``query``, from -1 (wrong) to 1
@@ -254,18 +280,25 @@ class AsyncGrid:
         return Item(node.id, None, content)
 
     async def search(
-        self, query: str | Item, k: int = 1, prefix: str = ""
+        self, query: str | Item, k: int = 1, prefix: str = "", *, wait: float = WAIT
     ) -> list[Result]:
         edges: list[Edge] = []
-        while len(edges) < k and (edge := await self.dna.create_edge(query, prefix)):
+        pauses = _backoff(wait)
+        while len(edges) < k:
+            edge = await self.dna.create_edge(query, prefix)
+            if edge is None:
+                if not pauses:
+                    break
+                await asyncio.sleep(pauses.pop(0))
+                continue
             edges.append(edge)
         return [await self._result(e) for e in edges]
 
     async def ask(
-        self, content: Content, k: int = 1, prefix: str = ""
+        self, content: Content, k: int = 1, prefix: str = "", *, wait: float = WAIT
     ) -> tuple[Item, list[Result]]:
         query = await self.query(content)
-        return query, await self.search(query, k, prefix)
+        return query, await self.search(query, k, prefix, wait=wait)
 
     async def score(self, query: str | Item, item: str | Item, score: float) -> Result:
         return await self._result(await self.dna.put_edge(query, item, score))

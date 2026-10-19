@@ -33,6 +33,8 @@ class FakeDNA:
         self._ids = itertools.count(1)
         self._keys = itertools.count(1)
         self._grid = self.grids[KEY]
+        self.lag = 0  # searches that miss a node after it is added, as before a tick
+        self._unticked: dict[str, int] = {}
 
     @property
     def nodes(self) -> dict[str, dict[str, Any]]:
@@ -89,6 +91,8 @@ class FakeDNA:
                 return self._reply(409, {"detail": "Resource already exists"})
             nid = f"{next(self._ids):016x}"
             self.nodes[nid] = {"id": nid, "key": key, "emb": emb}
+            if self.lag:
+                self._unticked[nid] = self.lag
             return self._reply(201, self.nodes[nid])
         if mt := re.fullmatch(r"/nodes/([0-9a-f]{16})", path):
             nid = mt[1]
@@ -144,6 +148,9 @@ class FakeDNA:
             if pid == nid or not n["key"] or not n["key"].startswith(prefix):
                 continue
             if (nid, pid) in self.edges or len(n["emb"]) != len(src):
+                continue
+            if self._unticked.get(pid):
+                self._unticked[pid] -= 1
                 continue
             s = sum(a * b for a, b in zip(src, n["emb"]))
             if best is None or s > best[0]:

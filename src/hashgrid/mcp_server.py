@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import inspect
+import logging
 import os
 from typing import Any, Callable
 
@@ -232,6 +233,7 @@ def build_server(local: Local | None = None) -> MCPServer:
 
 
 def main() -> None:
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # a line per request otherwise
     build_server().run("stdio")
 
 
