@@ -11,7 +11,7 @@ from hashgrid.dna import (
     AsyncDNA,
     Conflict,
     Edge,
-    Grid,
+    GridInfo,
     Invalid,
     Node,
     NotFound,
@@ -30,7 +30,7 @@ def test_key_from_env(monkeypatch, fake):
         DNA()
     monkeypatch.setenv("HASHGRID_API_KEY", KEY)
     monkeypatch.setenv("HASHGRID_DNA_URL", URL)
-    assert DNA(transport=fake.transport()).get_grid() == Grid("test")
+    assert DNA(transport=fake.transport()).get_grid() == GridInfo("test")
 
 
 def test_wrong_key(fake):
@@ -125,7 +125,7 @@ def test_other_errors_keep_status(fake):
 @pytest.mark.anyio
 async def test_async(fake):
     async with AsyncDNA(KEY, base_url=URL, transport=fake.transport()) as dna:
-        assert await dna.get_grid() == Grid("test")
+        assert await dna.get_grid() == GridInfo("test")
         item = await dna.create_node([1.0, 0.0], key="/a")
         q = await dna.create_node([1.0, 0.0])
         assert (await dna.search(q)).id == item.id

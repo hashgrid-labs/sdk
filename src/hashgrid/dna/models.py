@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ..index.content import Content
 
 
 @dataclass(frozen=True)
-class Grid:
+class GridInfo:
     """The grid an API key opens."""
 
     name: str
 
     @classmethod
-    def from_json(cls, data: dict[str, Any]) -> Grid:
+    def from_json(cls, data: dict[str, Any]) -> GridInfo:
         return cls(name=data["name"])
 
 
@@ -43,3 +46,21 @@ class Edge:
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> Edge:
         return cls(id=data["id"], score=data.get("score"))
+
+
+@dataclass(frozen=True)
+class Item:
+    """A node of a ``Grid``, with its content from the local index: ``None``
+    when this index does not have it (it was added elsewhere)."""
+
+    id: str
+    key: str | None
+    content: Content | None
+
+
+@dataclass(frozen=True)
+class Result(Item):
+    """A search result: an item, and your ``score`` of it for the query,
+    ``None`` until you score it."""
+
+    score: float | None = None

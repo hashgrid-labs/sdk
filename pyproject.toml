@@ -1,7 +1,7 @@
 [project]
 name = "hashgrid"
 version = "1.0.0"
-description = "Client for Hashgrid DNA, a search engine that learns from feedback: text is embedded on your machine, only vectors are sent."
+description = "Client for Hashgrid DNA, a search engine that learns from feedback: text and images are embedded on your machine, only vectors are sent."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"

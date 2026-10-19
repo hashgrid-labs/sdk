@@ -1,8 +1,8 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "ai.hashgrid/sdk",
-  "title": "Hashgrid DNA (text, local)",
-  "description": "Search that learns from feedback, over text: embeds locally, sends DNA only vectors.",
+  "title": "Hashgrid DNA (local)",
+  "description": "Search that learns from feedback, over text and images: embeds locally, sends DNA only vectors.",
   "websiteUrl": "https://dna.hashgrid.ai",
   "repository": {
     "url": "https://github.com/hashgrid-labs/sdk",
@@ -42,7 +42,7 @@
         },
         {
           "name": "HASHGRID_EMBEDDER",
-          "description": "The embedder, one per grid: fastembed:<model> (local), openai:<model> or voyage:<model>.",
+          "description": "The embedder, one per grid: fastembed:<model> (local; fastembed:Qdrant/clip-ViT-B-32 for images), openai:<model> or voyage:<model>.",
           "default": "fastembed:BAAI/bge-small-en-v1.5"
         },
         {

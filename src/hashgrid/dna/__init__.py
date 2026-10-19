@@ -1,8 +1,8 @@
-"""The client for Hashgrid DNA: ``DNA`` / ``AsyncDNA`` for the HTTP API, one
-method per route, and ``TextGrid`` / ``AsyncTextGrid`` to use it from text."""
+"""The client for Hashgrid DNA: ``Grid`` / ``AsyncGrid`` to add, search and
+score content (embedded locally by an ``Index``), and ``DNA`` / ``AsyncDNA``
+for the HTTP API itself, one method per route."""
 
-from .client import DEFAULT_URL, UNSET, AsyncDNA, DNA
-from .errors import (
+from ..errors import (
     Conflict,
     DNAError,
     Forbidden,
@@ -11,15 +11,18 @@ from .errors import (
     NotFound,
     Unauthorized,
 )
-from .models import Edge, Grid, Node
-from .text import AsyncTextGrid, TextGrid
+from .client import DEFAULT_URL, UNSET, AsyncDNA, DNA
+from .grid import AsyncGrid, Grid
+from .models import Edge, GridInfo, Item, Node, Result
 
 __all__ = [
+    "Grid",
+    "AsyncGrid",
+    "Item",
+    "Result",
     "DNA",
     "AsyncDNA",
-    "TextGrid",
-    "AsyncTextGrid",
-    "Grid",
+    "GridInfo",
     "Node",
     "Edge",
     "DNAError",

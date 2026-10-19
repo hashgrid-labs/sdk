@@ -12,8 +12,8 @@ from typing import Any, AsyncIterator, Callable, Generic, Iterator, TypeVar
 import httpx
 
 from .. import __version__
-from .errors import GET_A_KEY, DNAError, error_for
-from .models import Edge, Grid, Node
+from ..errors import GET_A_KEY, DNAError, error_for
+from .models import Edge, GridInfo, Node
 
 T = TypeVar("T")
 
@@ -42,7 +42,8 @@ class _Request(Generic[T]):
     answers: dict[int, Any] = field(default_factory=dict)
 
 
-def _id(value: str | Node | Edge) -> str:
+def _id(value: Any) -> str:
+    """An id, or anything with one: a ``Node``, ``Edge``, ``Item`` or ``Result``."""
     return value if isinstance(value, str) else value.id
 
 
@@ -66,8 +67,8 @@ class _routes:
     """Every route, as a request to send."""
 
     @staticmethod
-    def get_grid() -> _Request[Grid]:
-        return _Request("GET", "/", lambda r: Grid.from_json(r.json()))
+    def get_grid() -> _Request[GridInfo]:
+        return _Request("GET", "/", lambda r: GridInfo.from_json(r.json()))
 
     @staticmethod
     def list_nodes(cursor: str | None, limit: int) -> _Request[list[Node]]:
@@ -218,7 +219,7 @@ class DNA:
     def __exit__(self, *_: object) -> None:
         self.close()
 
-    def get_grid(self) -> Grid:
+    def get_grid(self) -> GridInfo:
         """``GET /``: the grid the API key opens."""
         return self._send(_routes.get_grid())
 
@@ -331,7 +332,7 @@ class AsyncDNA:
     async def __aexit__(self, *_: object) -> None:
         await self.aclose()
 
-    async def get_grid(self) -> Grid:
+    async def get_grid(self) -> GridInfo:
         return await self._send(_routes.get_grid())
 
     async def list_nodes(

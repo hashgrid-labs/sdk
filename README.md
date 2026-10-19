@@ -4,8 +4,8 @@ The Python client for [Hashgrid DNA](https://dna.hashgrid.ai), a search engine t
 feedback. You add items and search them; you score the results; DNA learns from the scores, so the
 next searches rank better.
 
-DNA works on embeddings only and never sees your text. This package turns text into embeddings on
-your machine, sends DNA only the vectors, and keeps the text with you.
+DNA works on embeddings only and never sees your content. This package embeds text and images on
+your machine, sends DNA only the vectors, and keeps the content with you, in a local index.
 
 <!-- mcp-name: ai.hashgrid/sdk -->
 
@@ -13,18 +13,17 @@ your machine, sends DNA only the vectors, and keeps the text with you.
 pip install 'hashgrid[local]'
 ```
 
-`[local]` adds the default embedder, which runs on your CPU with no account. To embed with OpenAI or
+`[local]` adds the local embedders, which run on your CPU with no account. To embed with OpenAI or
 Voyage instead, install plain `hashgrid` and use your own key.
 
 You need a DNA API key (`hg-…`), one per grid. No key yet? Write to office@hashgrid.ai.
 
-## From text
+## Add, search, score
 
 ```python
-from hashgrid.dna import DNA, TextGrid
-from hashgrid.embed import from_spec
+from hashgrid.dna import Grid
 
-grid = TextGrid(DNA(), from_spec())  # key from $HASHGRID_API_KEY
+grid = Grid()  # Index() and DNA(), from the environment; the key from $HASHGRID_API_KEY
 
 grid.add_many({
     "/cities/lisbon": "Lisbon, a hilly coastal capital",
@@ -32,37 +31,65 @@ grid.add_many({
 })
 
 query, results = grid.ask("a capital by the sea", k=2, prefix="/cities/")
+results[0].content                    # "Lisbon, a hilly coastal capital"
 grid.score(query, results[0], 1.0)    # a good result
 grid.score(query, results[1], -0.5)   # a poor one
 ```
 
 - **Items** have a `key`, a path unique in the grid. Only items are found by searches, and `prefix`
-  narrows a search to keys that start with it.
+  narrows a search to keys that start with it. Without a key, an item is keyed by a hash of its
+  content, so adding the same content again returns the same item.
 - **Queries** have no key. `grid.search(query, k)` gives the next `k` results not shown before.
 - **Scores** run from -1 (wrong) to 1 (perfect). You can score a result, or any pair you already know
   is good or bad. Only scores train DNA.
 
-Results are ids (`edge.id` is the item's id). Map them back to your text with the ids `add` returned,
-or by key.
+Each `Result` has the item's `id`, `key`, `content` (from the index) and your `score`. `grid.results(query)`
+lists a query's results so far, and `grid.get` and `grid.delete` take an item or its id. `AsyncGrid`
+does the same with `await`.
 
-`AsyncTextGrid` does the same with `await`.
+## Images
 
-## Embedders
+Content is text or an `Image`, from a file or from bytes. Images need an embedder that takes them:
 
-Use one embedder per grid. Vectors from different models do not compare. `TextGrid` refuses
-vectors whose length differs from the grid's.
+```python
+from hashgrid.dna import Grid
+from hashgrid.index import Image, Index
 
-| spec | runs | needs |
-| --- | --- | --- |
-| `fastembed:BAAI/bge-small-en-v1.5` (default) | locally, on CPU | `hashgrid[local]` |
-| `openai:text-embedding-3-small` | OpenAI | `OPENAI_API_KEY` |
-| `voyage:voyage-3.5` | Voyage AI | `VOYAGE_API_KEY` |
+grid = Grid(Index("fastembed:Qdrant/clip-ViT-B-32"))
+grid.add(Image("photos/beach.jpg"), key="/photos/beach")
+query, results = grid.ask("a sunny beach", k=5)      # text finds images
+query, results = grid.ask(Image("another.jpg"))      # and so do images
+```
 
-`from_spec()` reads `$HASHGRID_EMBEDDER` and falls back to the default. Any fastembed, OpenAI or
-Voyage model works: `fastembed:<model>`, `openai:<model>`, `voyage:<model>`. DNA takes up to 2048
-values, so `openai:text-embedding-3-large` is shortened to 2048 (`openai:<model>@<n>` sets the
-length). Your own embedder is any object with `spec`, `embed_documents(texts)` and
-`embed_queries(texts)`.
+## The index
+
+`Index` is the local half of a grid. It embeds content, and keeps it in sqlite by DNA id, so results
+come back with their content. `Index()` uses the default embedder and `~/.hashgrid/index.sqlite`;
+`$HASHGRID_EMBEDDER` and `$HASHGRID_INDEX` change them, and so do its arguments:
+
+```python
+Index("voyage:voyage-multimodal-3")
+Index(OpenAI("text-embedding-3-small", dimensions=512), path="my-index.sqlite")
+Index(path=":memory:")   # keeps nothing
+```
+
+Use one embedder per grid. Vectors from different models do not compare. The index records each grid's
+embedder and refuses another, and a grid refuses vectors whose length differs from its own.
+
+| embedder | takes | runs | needs |
+| --- | --- | --- | --- |
+| `fastembed:BAAI/bge-small-en-v1.5` (default) | text | locally | `hashgrid[local]` |
+| `fastembed:Qdrant/clip-ViT-B-32`, `fastembed:jinaai/jina-clip-v1` | text, images | locally | `hashgrid[local]` |
+| `openai:text-embedding-3-small` | text | OpenAI | `OPENAI_API_KEY` |
+| `voyage:voyage-3.5` | text | Voyage AI | `VOYAGE_API_KEY` |
+| `voyage:voyage-multimodal-3` | text, images | Voyage AI | `VOYAGE_API_KEY` |
+
+Other fastembed, OpenAI and Voyage models work too: `fastembed:<model>`, `openai:<model>`,
+`voyage:<model>`. DNA takes up to 2048 values, so `openai:text-embedding-3-large` is shortened to 2048
+(`openai:<model>@<n>` sets the length). With OpenAI or Voyage, your content goes to that provider under
+your own key, and still never to DNA. Your own embedder is any object with a `spec`, the `modalities` it
+takes (`{"text"}`, `{"text", "image"}`) and `embed(contents, kind)`, where `kind` is `"document"` or
+`"query"`.
 
 ## The API, typed
 
@@ -100,8 +127,8 @@ subclasses of `DNAError`.
 
 ## MCP server
 
-`hashgrid-mcp` is a local MCP server, over stdio, for agents that work in text. It embeds on your
-machine, sends DNA only the vectors, and keeps the text in a local index, a sqlite file.
+`hashgrid-mcp` is a local MCP server, over stdio, for agents that work with text and images. It
+embeds on your machine, sends DNA only the vectors, and keeps the content in the local index.
 
 ```json
 {
@@ -123,13 +150,14 @@ claude mcp add hashgrid -e HASHGRID_API_KEY=hg-… -- uvx --from 'hashgrid[local
 
 The tools:
 
-- `add_item(text, key?)`: add an item.
-- `search(query, k, prefix)`: the best results, with their text.
+- `add_item(text | image, key?)`: add an item, text or the path of an image file.
+- `search(query | image, k, prefix)`: the best results, with their text or image path.
 - `more_results(query_id, k, prefix)`: the next ones.
 - `score(query_id, item_id, score)`: score a result.
 - `delete_item(item_id)`: delete an item.
 
-The first search downloads the local model, about 70 MB.
+The first call downloads the local model, about 70 MB. For images, set
+`HASHGRID_EMBEDDER=fastembed:Qdrant/clip-ViT-B-32`.
 
 | variable | default |
 | --- | --- |
@@ -140,7 +168,7 @@ The first search downloads the local model, about 70 MB.
 
 The server records each grid's embedder in the index, and refuses another one for that grid.
 
-The hosted server at `https://dna.hashgrid.ai/mcp` takes vectors, not text. Use it if your agent
+The hosted server at `https://dna.hashgrid.ai/mcp` takes vectors, not content. Use it if your agent
 makes its own embeddings.
 
 ## License

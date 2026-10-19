@@ -117,12 +117,15 @@ class FakeDNA:
 
 
 class HashEmbedder:
-    """A deterministic bag-of-words embedder, unit length."""
+    """A deterministic bag-of-words embedder, unit length. An image is
+    embedded by the words in its bytes, so a test image of b"a cat" is found
+    by the text "cat"."""
 
-    def __init__(self, dim: int = 64, spec: str | None = None):
+    def __init__(self, dim: int = 64, spec: str | None = None, images: bool = True):
         self.dim = dim
         self.spec = spec or f"test:hash@{dim}"
-        self.calls: list[tuple[str, list[str]]] = []
+        self.modalities = frozenset({"text", "image"} if images else {"text"})
+        self.calls: list[tuple[str, list]] = []
 
     def _one(self, text: str) -> list[float]:
         v = [0.0] * self.dim
@@ -131,10 +134,6 @@ class HashEmbedder:
         n = math.sqrt(sum(x * x for x in v)) or 1.0
         return [x / n for x in v]
 
-    def embed_documents(self, texts):
-        self.calls.append(("document", list(texts)))
-        return [self._one(t) for t in texts]
-
-    def embed_queries(self, texts):
-        self.calls.append(("query", list(texts)))
-        return [self._one(t) for t in texts]
+    def embed(self, contents, kind):
+        self.calls.append((kind, list(contents)))
+        return [self._one(c if isinstance(c, str) else c.read().decode("latin-1")) for c in contents]
