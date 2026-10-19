@@ -164,3 +164,14 @@ async def test_async_create_and_delete_grid(fake):
         assert (await dna.get_grid()).name == "mine"
         await dna.delete_grid()
     assert key.api_key not in fake.grids
+
+
+def test_delete_nodes(dna, fake):
+    a, b, c = (dna.create_node([1.0], key=f"/{i}") for i in "abc")
+    dna.put_edge(a, b, 1.0)
+    dna.delete_nodes([a, b.id, "00000000000000ff"])
+    assert json.loads(fake.requests[-1].content) == {"ids": [a.id, b.id, "00000000000000ff"]}
+    assert fake.requests[-1].method == "DELETE" and fake.requests[-1].url.path == "/api/v1/nodes"
+    assert [n.id for n in dna.list_nodes()] == [c.id] and fake.edges == {}
+    with pytest.raises(ValueError, match="1024"):
+        dna.delete_nodes(["00000000000000ff"] * 1025)

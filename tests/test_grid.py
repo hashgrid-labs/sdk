@@ -187,3 +187,20 @@ async def test_async_search_waits_for_new_items(fake, monkeypatch):
     await grid.add("hello", key="/h")
     _, results = await grid.ask("hello")
     assert [r.key for r in results] == ["/h"] and pauses == [0.1]
+
+
+def test_delete_many(fake):
+    grid = _grid(fake)
+    items = grid.add_many(["one", "two", "three"])
+    grid.delete_many(items[:2])
+    assert list(fake.nodes) == [items[2].id]
+    assert grid.index.get(grid._core.name, items[0].id) is None
+    assert grid.index.get(grid._core.name, items[2].id) == (items[2].key, "three")
+
+
+@pytest.mark.anyio
+async def test_async_delete_many(fake):
+    grid = AsyncGrid(Index(HashEmbedder(), path=":memory:"), AsyncDNA(KEY, base_url=URL, transport=fake.transport()))
+    items = await grid.add_many(["one", "two"])
+    await grid.delete_many([i.id for i in items])
+    assert fake.nodes == {}

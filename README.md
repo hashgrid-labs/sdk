@@ -51,7 +51,8 @@ grid.score(query, results[1], -0.5)   # a poor one
   is good or bad. Only scores train DNA.
 
 Each `Result` has the item's `id`, `key`, `content` (from the index) and your `score`. `grid.results(query)`
-lists a query's results so far, and `grid.get` and `grid.delete` take an item or its id.
+lists a query's results so far, and `grid.get` and `grid.delete` take an item or its id;
+`grid.delete_many` deletes many in one request.
 `grid.delete_grid()` deletes the whole grid, for good, and its content in the index. `AsyncGrid` does
 the same with `await`.
 
@@ -124,6 +125,7 @@ dna.put_edge(query, edge, 1.0)                    # the score
 | `create_node(emb, key=None)` | `POST /nodes` |
 | `update_node(nid, key=…, emb=…)` | `PATCH /nodes/{nid}` |
 | `delete_node(nid)` | `DELETE /nodes/{nid}` |
+| `delete_nodes(nids)` | `DELETE /nodes` |
 | `list_edges(nid, cursor, limit)`, `iter_edges(nid)` | `GET /nodes/{nid}/edges` |
 | `get_edge(nid, eid)` | `GET /nodes/{nid}/edges/{eid}` |
 | `create_edge(nid, prefix="")`, alias `search` | `POST /nodes/{nid}/edges` |

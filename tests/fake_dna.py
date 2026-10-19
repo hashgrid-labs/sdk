@@ -80,6 +80,14 @@ class FakeDNA:
         if path == "/" and m == "DELETE":
             del self.grids[auth.removeprefix("Bearer ")]
             return self._reply(204)
+        if path == "/nodes" and m == "DELETE":
+            ids = body["ids"]
+            if len(ids) > 1024:
+                return self._reply(422, {"detail": "at most 1024 ids"})
+            for nid in ids:
+                self.nodes.pop(nid, None)
+            self.edges = {p: s for p, s in self.edges.items() if not set(p) & set(ids)}
+            return self._reply(204)
         if path == "/nodes" and m == "GET":
             ids = sorted(i for i in self.nodes if i > q.get("cursor", ""))
             return self._reply(200, [self.nodes[i] for i in ids[: int(q.get("limit", 32))]])

@@ -2,4 +2,4 @@
 learns from feedback over embeddings; ``hashgrid.index`` embeds text and
 images on your machine and keeps them, so DNA only sees vectors."""
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"

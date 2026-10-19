@@ -7,7 +7,7 @@ from __future__ import annotations
 import math
 import os
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Callable, Generic, Iterator, TypeVar
+from typing import Any, AsyncIterator, Callable, Generic, Iterable, Iterator, TypeVar
 
 import httpx
 
@@ -114,6 +114,12 @@ class _routes:
     @staticmethod
     def delete_node(nid: str) -> _Request[None]:
         return _Request("DELETE", f"/nodes/{nid}", _none)
+
+    @staticmethod
+    def delete_nodes(nids: list[str]) -> _Request[None]:
+        if len(nids) > MAXN:
+            raise ValueError(f"delete_nodes takes at most {MAXN} ids at once")
+        return _Request("DELETE", "/nodes", _none, json={"ids": nids})
 
     @staticmethod
     def list_edges(nid: str, cursor: str | None, limit: int) -> _Request[list[Edge]]:
@@ -302,6 +308,11 @@ class DNA:
         """``DELETE /nodes/{nid}``: the node and every edge from or to it."""
         self._send(_routes.delete_node(_id(nid)))
 
+    def delete_nodes(self, nids: Iterable[Any]) -> None:
+        """``DELETE /nodes``: delete many nodes and their edges in one request,
+        1024 at most; ids of no node are skipped."""
+        self._send(_routes.delete_nodes([_id(n) for n in nids]))
+
     def list_edges(
         self, nid: str | Node, cursor: str | None = None, limit: int = DEFN
     ) -> list[Edge]:
@@ -410,6 +421,9 @@ class AsyncDNA:
 
     async def delete_node(self, nid: str | Node) -> None:
         await self._send(_routes.delete_node(_id(nid)))
+
+    async def delete_nodes(self, nids: Iterable[Any]) -> None:
+        await self._send(_routes.delete_nodes([_id(n) for n in nids]))
 
     async def list_edges(
         self, nid: str | Node, cursor: str | None = None, limit: int = DEFN

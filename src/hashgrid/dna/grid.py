@@ -19,7 +19,7 @@ from ..errors import Conflict, ModelMismatch
 from ..index import Index
 from ..index.content import Content, content_key, same
 from ..index.embedders import Kind
-from .client import DNA, AsyncDNA, _id, acreate_grid, create_grid
+from .client import MAXN, DNA, AsyncDNA, _id, acreate_grid, create_grid
 from .models import Edge, GridKey, Item, Node, Result
 
 
@@ -198,6 +198,16 @@ class Grid:
         self.dna.delete_node(item)
         core.index.delete(core.name or "", _id(item))
 
+    def delete_many(self, items: Iterable[str | Item]) -> None:
+        """Delete items, their content in the index and their scores, in
+        requests of up to 1024."""
+        core = self._open()
+        ids = [_id(i) for i in items]
+        for at in range(0, len(ids), MAXN):
+            self.dna.delete_nodes(ids[at : at + MAXN])
+            for i in ids[at : at + MAXN]:
+                core.index.delete(core.name or "", i)
+
     def delete_grid(self) -> None:
         """Delete the grid, everything in it and its content in the index, for
         good; its key stops working."""
@@ -314,6 +324,14 @@ class AsyncGrid:
         core = await self._open()
         await self.dna.delete_node(item)
         core.index.delete(core.name or "", _id(item))
+
+    async def delete_many(self, items: Iterable[str | Item]) -> None:
+        core = await self._open()
+        ids = [_id(i) for i in items]
+        for at in range(0, len(ids), MAXN):
+            await self.dna.delete_nodes(ids[at : at + MAXN])
+            for i in ids[at : at + MAXN]:
+                core.index.delete(core.name or "", i)
 
     async def delete_grid(self) -> None:
         core = await self._open()
