@@ -13,7 +13,7 @@ import httpx
 
 from .. import __version__
 from ..errors import GET_A_KEY, DNAError, error_for
-from .models import Edge, GridInfo, Node
+from .models import Edge, GridInfo, GridKey, Node
 
 T = TypeVar("T")
 
@@ -65,6 +65,16 @@ def _none(_: httpx.Response) -> None:
 
 class _routes:
     """Every route, as a request to send."""
+
+    @staticmethod
+    def create_grid(name: str) -> _Request[GridKey]:
+        return _Request(
+            "POST", "/", lambda r: GridKey.from_json(r.json()), json={"name": name}
+        )
+
+    @staticmethod
+    def delete_grid() -> _Request[None]:
+        return _Request("DELETE", "/", _none)
 
     @staticmethod
     def get_grid() -> _Request[GridInfo]:
@@ -153,21 +163,53 @@ class _routes:
         return _Request("DELETE", f"/nodes/{nid}/edges/{eid}", _none)
 
 
+def _url(base_url: str | None) -> str:
+    return (base_url or os.environ.get("HASHGRID_DNA_URL") or DEFAULT_URL).rstrip("/")
+
+
 def _settings(api_key: str | None, base_url: str | None) -> tuple[str, str]:
     key = api_key or os.environ.get("HASHGRID_API_KEY")
     if not key:
         raise ValueError(
             f"Pass api_key= or set HASHGRID_API_KEY to your DNA API key (hg-…). {GET_A_KEY}"
         )
-    url = base_url or os.environ.get("HASHGRID_DNA_URL") or DEFAULT_URL
-    return key, url.rstrip("/")
+    return key, _url(base_url)
 
 
-def _headers(key: str) -> dict[str, str]:
-    return {
-        "Authorization": f"Bearer {key}",
-        "User-Agent": f"hashgrid-python/{__version__}",
-    }
+def _headers(key: str | None = None) -> dict[str, str]:
+    agent = {"User-Agent": f"hashgrid-python/{__version__}"}
+    return {"Authorization": f"Bearer {key}", **agent} if key else agent
+
+
+def create_grid(
+    name: str = "hashgrid",
+    *,
+    base_url: str | None = None,
+    timeout: float = 30.0,
+    transport: httpx.BaseTransport | None = None,
+) -> GridKey:
+    """``POST /``: create a grid; no key needed. Returns its name and its API
+    key, shown only this once: keep it, then ``DNA(key.api_key)``."""
+    req = _routes.create_grid(name)
+    with httpx.Client(
+        base_url=_url(base_url), headers=_headers(), timeout=timeout, transport=transport
+    ) as http:
+        return _result(req, http.request(req.method, req.path, json=req.json))
+
+
+async def acreate_grid(
+    name: str = "hashgrid",
+    *,
+    base_url: str | None = None,
+    timeout: float = 30.0,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> GridKey:
+    """``create_grid``, awaited."""
+    req = _routes.create_grid(name)
+    async with httpx.AsyncClient(
+        base_url=_url(base_url), headers=_headers(), timeout=timeout, transport=transport
+    ) as http:
+        return _result(req, await http.request(req.method, req.path, json=req.json))
 
 
 def _result(req: _Request[T], r: httpx.Response) -> T:
@@ -186,7 +228,7 @@ class DNA:
     """The DNA API, synchronously. The API key defaults to ``$HASHGRID_API_KEY``
     and the URL to ``$HASHGRID_DNA_URL``, else the hosted API.
 
-    >>> dna = DNA()
+    >>> dna = DNA(create_grid("mine").api_key)   # or DNA(): $HASHGRID_API_KEY
     >>> item = dna.create_node([0.1, 0.2], key="/items/1")
     >>> query = dna.create_node([0.1, 0.3])
     >>> edge = dna.create_edge(query, prefix="/items/")   # search
@@ -222,6 +264,11 @@ class DNA:
     def get_grid(self) -> GridInfo:
         """``GET /``: the grid the API key opens."""
         return self._send(_routes.get_grid())
+
+    def delete_grid(self) -> None:
+        """``DELETE /``: delete the grid, its nodes and its edges, for good;
+        its key stops working."""
+        self._send(_routes.delete_grid())
 
     def list_nodes(self, cursor: str | None = None, limit: int = DEFN) -> list[Node]:
         """``GET /nodes``: a page of nodes, in id order; for the next page pass
@@ -335,6 +382,9 @@ class AsyncDNA:
     async def get_grid(self) -> GridInfo:
         return await self._send(_routes.get_grid())
 
+    async def delete_grid(self) -> None:
+        await self._send(_routes.delete_grid())
+
     async def list_nodes(
         self, cursor: str | None = None, limit: int = DEFN
     ) -> list[Node]:
@@ -397,4 +447,4 @@ class AsyncDNA:
         await self._send(_routes.delete_edge(_id(nid), _id(eid)))
 
 
-__all__ = ["DNA", "AsyncDNA", "DNAError", "UNSET", "DEFAULT_URL"]
+__all__ = ["DNA", "AsyncDNA", "create_grid", "acreate_grid", "DNAError", "UNSET", "DEFAULT_URL"]

@@ -10,24 +10,23 @@ import pytest
 from mcp import Client, StdioServerParameters
 
 from fake_dna import KEY, URL, FakeDNA, HashEmbedder
-from hashgrid.dna import AsyncDNA, AsyncGrid
 from hashgrid.index import Index
 from hashgrid.index.content import content_key
-from hashgrid.mcp_server import build_server
+from hashgrid.mcp_server import Local, build_server
 
-TOOLS = {"add_item", "search", "more_results", "score", "delete_item"}
+TOOLS = {"add_item", "search", "more_results", "score", "delete_item", "create_grid", "delete_grid"}
 
 
-async def call(client: Client, name: str, **arguments: Any) -> Any:
-    result = await client.call_tool(name, arguments)
+async def call(client: Client, tool: str, **arguments: Any) -> Any:
+    result = await client.call_tool(tool, arguments)
     if result.is_error:
         raise AssertionError(result.content[0].text)
     out = result.structured_content
     return out["result"] if isinstance(out, dict) and set(out) == {"result"} else out
 
 
-async def error(client: Client, name: str, **arguments: Any) -> str:
-    result = await client.call_tool(name, arguments)
+async def error(client: Client, tool: str, **arguments: Any) -> str:
+    result = await client.call_tool(tool, arguments)
     assert result.is_error, result
     return result.content[0].text
 
@@ -37,13 +36,18 @@ def index_path(tmp_path):
     return tmp_path / "index.sqlite"
 
 
-def _server(fake: FakeDNA, index_path, embedder=None, key: str | None = KEY):
-    return build_server(
-        lambda: AsyncGrid(
-            Index(embedder or HashEmbedder(), path=index_path),
-            AsyncDNA(key, base_url=URL, transport=fake.transport()),
-        )
+@pytest.fixture(autouse=True)
+def _key(monkeypatch):
+    monkeypatch.setenv("HASHGRID_API_KEY", KEY)
+
+
+def _server(fake: FakeDNA, index_path, embedder=None):
+    local = Local(
+        lambda: Index(embedder or HashEmbedder(), path=index_path),
+        base_url=URL,
+        transport=fake.transport(),
     )
+    return build_server(local)
 
 
 @pytest.mark.anyio
@@ -125,18 +129,45 @@ async def test_delete(fake, index_path):
 
 
 @pytest.mark.anyio
-async def test_errors(fake, index_path):
-    async with Client(_server(fake, index_path, key="hg-wrong")) as client:
-        assert "office@hashgrid.ai" in await error(client, "add_item", text="x")
+async def test_errors(fake, index_path, monkeypatch):
+    monkeypatch.setenv("HASHGRID_API_KEY", "hg-wrong")
+    async with Client(_server(fake, index_path)) as client:
+        assert "create_grid()" in await error(client, "add_item", text="x")
+    monkeypatch.setenv("HASHGRID_API_KEY", KEY)
     async with Client(_server(fake, index_path)) as client:
         assert "`k` must be 1 to 50" in await error(client, "search", query="x", k=0)
 
 
 @pytest.mark.anyio
-async def test_no_key(fake, index_path):
-    async with Client(_server(fake, index_path, key=None)) as client:
+async def test_no_key_then_create_grid(fake, index_path, monkeypatch):
+    monkeypatch.delenv("HASHGRID_API_KEY")
+    async with Client(_server(fake, index_path)) as client:
         assert {t.name for t in (await client.list_tools()).tools} == TOOLS  # starts without one
-        assert "HASHGRID_API_KEY" in await error(client, "add_item", text="x")
+        msg = await error(client, "add_item", text="x")
+        assert "create_grid" in msg and "HASHGRID_API_KEY" in msg
+        made = await call(client, "create_grid", name="mine")
+        assert made == {"name": "mine", "saved_in": str(index_path)}
+        assert "api_key" not in made  # kept in the index, not shown to the agent
+        assert "has a grid already" in await error(client, "create_grid")
+        item = await call(client, "add_item", text="hello")
+    assert fake.grids["hg-new1"].nodes.keys() == {item["id"]}
+    assert oct(index_path.stat().st_mode & 0o777) == "0o600"
+    # A new server finds the saved key.
+    async with Client(_server(fake, index_path)) as client:
+        found = await call(client, "search", query="hello")
+        assert found["results"][0]["text"] == "hello"
+        assert "must be the grid's name" in await error(client, "delete_grid", confirm="nope")
+        assert await call(client, "delete_grid", confirm="mine") == "Deleted grid 'mine'"
+        assert "hg-new1" not in fake.grids
+        assert "No DNA grid yet" in await error(client, "add_item", text="x")
+        assert (await call(client, "create_grid"))["name"] == "hashgrid"  # a fresh one
+    assert Index(HashEmbedder(), path=index_path).saved_key(f"{URL}/") == "hg-new2"
+
+
+@pytest.mark.anyio
+async def test_create_grid_refused_with_env_key(fake, index_path):
+    async with Client(_server(fake, index_path)) as client:
+        assert "HASHGRID_API_KEY is set" in await error(client, "create_grid")
 
 
 @pytest.mark.anyio

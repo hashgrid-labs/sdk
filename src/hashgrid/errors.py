@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-GET_A_KEY = "No key yet? Write to office@hashgrid.ai for one; each key opens one grid."
+GET_A_KEY = "No key yet? Create a grid, no key needed: hashgrid.dna.create_grid() returns its key."
 
 
 class DNAError(Exception):

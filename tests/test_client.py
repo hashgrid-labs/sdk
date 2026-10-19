@@ -9,6 +9,9 @@ from fake_dna import KEY, URL
 from hashgrid.dna import (
     DNA,
     AsyncDNA,
+    GridKey,
+    acreate_grid,
+    create_grid,
     Conflict,
     Edge,
     GridInfo,
@@ -26,7 +29,7 @@ def dna(fake):
 
 
 def test_key_from_env(monkeypatch, fake):
-    with pytest.raises(ValueError, match="office@hashgrid.ai"):
+    with pytest.raises(ValueError, match="create_grid"):
         DNA()
     monkeypatch.setenv("HASHGRID_API_KEY", KEY)
     monkeypatch.setenv("HASHGRID_DNA_URL", URL)
@@ -34,7 +37,7 @@ def test_key_from_env(monkeypatch, fake):
 
 
 def test_wrong_key(fake):
-    with pytest.raises(Unauthorized, match="office@hashgrid.ai"):
+    with pytest.raises(Unauthorized, match="create_grid"):
         DNA("hg-wrong", base_url=URL, transport=fake.transport()).get_grid()
 
 
@@ -136,3 +139,28 @@ async def test_async(fake):
         await dna.delete_node(item)
         with pytest.raises(NotFound):
             await dna.get_node(item)
+
+
+def test_create_and_delete_grid(fake):
+    key = create_grid("mine", base_url=URL, transport=fake.transport())
+    assert key == GridKey("mine", "hg-new1") and "hg-new1" not in repr(key)
+    assert "authorization" not in fake.requests[-1].headers  # no key needed
+    dna = DNA(key.api_key, base_url=URL, transport=fake.transport())
+    assert dna.get_grid() == GridInfo("mine")
+    dna.create_node([1.0], key="/a")
+    dna.delete_grid()
+    assert "hg-new1" not in fake.grids
+    with pytest.raises(Unauthorized):
+        dna.get_grid()
+    assert create_grid(base_url=URL, transport=fake.transport()).name == "hashgrid"
+    with pytest.raises(Invalid):
+        create_grid("", base_url=URL, transport=fake.transport())
+
+
+@pytest.mark.anyio
+async def test_async_create_and_delete_grid(fake):
+    key = await acreate_grid("mine", base_url=URL, transport=fake.transport())
+    async with AsyncDNA(key.api_key, base_url=URL, transport=fake.transport()) as dna:
+        assert (await dna.get_grid()).name == "mine"
+        await dna.delete_grid()
+    assert key.api_key not in fake.grids

@@ -148,3 +148,18 @@ def test_bind_one_embedder_per_grid():
     with pytest.raises(ModelMismatch, match="built with test:hash@64"):
         other.bind("g")
     other.bind("h")
+
+
+def test_saved_keys_and_drop(tmp_path):
+    idx = Index(HashEmbedder(), path=tmp_path / "i.sqlite")
+    assert oct((tmp_path / "i.sqlite").stat().st_mode & 0o777) == "0o600"
+    assert idx.saved_key("https://dna.test/") is None
+    idx.save_key("https://dna.test/", "mine", "hg-x")
+    assert idx.saved_key("https://dna.test/") == "hg-x"
+    idx.bind("https://dna.test/ mine")
+    idx.put("https://dna.test/ mine", "01", "/a", "a")
+    idx.put("https://dna.test/ other", "01", "/a", "a")
+    idx.drop("https://dna.test/ mine")
+    assert idx.get("https://dna.test/ mine", "01") is None
+    assert idx.get("https://dna.test/ other", "01") == ("/a", "a")
+    assert idx.saved_key("https://dna.test/") is None

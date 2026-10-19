@@ -17,13 +17,38 @@ KEY = "hg-test"
 URL = "https://dna.test/api/v1"
 
 
-class FakeDNA:
-    def __init__(self, name: str = "test"):
+class _Grid:
+    def __init__(self, name: str):
         self.name = name
         self.nodes: dict[str, dict[str, Any]] = {}
         self.edges: dict[tuple[str, str], float | None] = {}
+
+
+class FakeDNA:
+    """Grids by API key; ``KEY`` opens the first, ``POST /`` makes more."""
+
+    def __init__(self, name: str = "test"):
+        self.grids: dict[str, _Grid] = {KEY: _Grid(name)}
         self.requests: list[httpx.Request] = []
         self._ids = itertools.count(1)
+        self._keys = itertools.count(1)
+        self._grid = self.grids[KEY]
+
+    @property
+    def nodes(self) -> dict[str, dict[str, Any]]:
+        return self._grid.nodes
+
+    @nodes.setter
+    def nodes(self, value: dict[str, dict[str, Any]]) -> None:
+        self._grid.nodes = value
+
+    @property
+    def edges(self) -> dict[tuple[str, str], float | None]:
+        return self._grid.edges
+
+    @edges.setter
+    def edges(self, value: dict[tuple[str, str], float | None]) -> None:
+        self._grid.edges = value
 
     def transport(self) -> httpx.MockTransport:
         return httpx.MockTransport(self.handle)
@@ -33,13 +58,26 @@ class FakeDNA:
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
-        if request.headers.get("authorization") != f"Bearer {KEY}":
-            return self._reply(401, {"detail": "Invalid API key"})
         path = request.url.path.removeprefix("/api/v1")
         body = json.loads(request.content) if request.content else {}
         m, q = request.method, request.url.params
+        if path == "/" and m == "POST":  # no key needed
+            name = body.get("name", "hashgrid")
+            if not 1 <= len(name) <= 256:
+                return self._reply(422, {"detail": "name must be 1 to 256 characters"})
+            key = f"hg-new{next(self._keys)}"
+            self.grids[key] = _Grid(name)
+            return self._reply(201, {"name": name, "api_key": key})
+        auth = request.headers.get("authorization", "")
+        grid = self.grids.get(auth.removeprefix("Bearer "))
+        if grid is None:
+            return self._reply(401, {"detail": "Invalid API key"})
+        self._grid = grid
         if path == "/" and m == "GET":
-            return self._reply(200, {"name": self.name})
+            return self._reply(200, {"name": grid.name})
+        if path == "/" and m == "DELETE":
+            del self.grids[auth.removeprefix("Bearer ")]
+            return self._reply(204)
         if path == "/nodes" and m == "GET":
             ids = sorted(i for i in self.nodes if i > q.get("cursor", ""))
             return self._reply(200, [self.nodes[i] for i in ids[: int(q.get("limit", 32))]])

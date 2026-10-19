@@ -8,19 +8,25 @@ content with you, in a local index.
 
 ```bash
 pip install 'hashgrid[local]'
-export HASHGRID_API_KEY=hg-…
 ```
 
-`[local]` adds embedding models that run on your CPU, with no account. No API key yet? Write to
-office@hashgrid.ai.
+`[local]` adds embedding models that run on your CPU, with no account.
 
-## Add, search, score
+## Create a grid
 
 ```python
 from hashgrid.dna import Grid
 
-grid = Grid()
+grid = Grid.create("mine")
+print(grid.key.api_key)
+```
 
+No key is needed to create one. The grid's API key is shown only now: keep it, for example as
+`HASHGRID_API_KEY`, and `Grid()` opens the grid again.
+
+## Add, search, score
+
+```python
 grid.add_many({
     "/docs/install": "How to install the CLI on macOS and Linux",
     "/docs/billing": "Invoices, refunds and changing your plan",
@@ -65,9 +71,10 @@ provider under your own key, and still never to DNA.
 claude mcp add hashgrid -e HASHGRID_API_KEY=hg-… -- uvx --from 'hashgrid[local]' hashgrid-mcp
 ```
 
-The agent gets five tools: `add_item`, `search`, `more_results`, `score` and `delete_item`. They take
-and return text, or image file paths. The server embeds locally and keeps the content in the local
-index, `~/.hashgrid/index.sqlite`. Only vectors go to DNA.
+Leave out `-e HASHGRID_API_KEY=…` and the agent can create a grid itself, with `create_grid`; the
+key is saved in the local index. The other tools are `add_item`, `search`, `more_results`, `score`,
+`delete_item` and `delete_grid`. They take and return text, or image file paths. The server embeds
+locally and keeps the content in the local index, `~/.hashgrid/index.sqlite`. Only vectors go to DNA.
 
 If your agent makes its own embeddings, use the hosted server at `https://dna.hashgrid.ai/mcp`
 instead. It takes vectors.

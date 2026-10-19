@@ -33,6 +33,8 @@ class Index:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.path = path
         self.db = sqlite3.connect(path, check_same_thread=False)
+        if str(path) != ":memory:":
+            os.chmod(path, 0o600)  # it may hold an API key
         self.db.executescript(
             """
             CREATE TABLE IF NOT EXISTS grids (
@@ -50,6 +52,11 @@ class Index:
                 PRIMARY KEY (grid, id)
             );
             CREATE INDEX IF NOT EXISTS items_key ON items (grid, key);
+            CREATE TABLE IF NOT EXISTS keys (
+                url TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                api_key TEXT NOT NULL
+            );
             """
         )
 
@@ -115,6 +122,27 @@ class Index:
     def delete(self, grid: str, id: str) -> None:
         with self.db:
             self.db.execute("DELETE FROM items WHERE grid = ? AND id = ?", (grid, id))
+
+    def drop(self, grid: str) -> None:
+        """Forget ``grid``: its content, its embedder, and its saved key."""
+        with self.db:
+            self.db.execute("DELETE FROM items WHERE grid = ?", (grid,))
+            self.db.execute("DELETE FROM grids WHERE grid = ?", (grid,))
+            url, _, name = grid.partition(" ")
+            self.db.execute("DELETE FROM keys WHERE url = ? AND name = ?", (url, name))
+
+    def save_key(self, url: str, name: str, api_key: str) -> None:
+        """Keep the API key of a grid this index made, at DNA ``url``."""
+        with self.db:
+            self.db.execute(
+                "INSERT OR REPLACE INTO keys (url, name, api_key) VALUES (?, ?, ?)",
+                (url, name, api_key),
+            )
+
+    def saved_key(self, url: str) -> str | None:
+        """The API key saved for DNA ``url``, if any."""
+        row = self.db.execute("SELECT api_key FROM keys WHERE url = ?", (url,)).fetchone()
+        return row[0] if row else None
 
     def close(self) -> None:
         self.db.close()

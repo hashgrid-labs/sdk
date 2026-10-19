@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -18,6 +18,19 @@ class GridInfo:
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> GridInfo:
         return cls(name=data["name"])
+
+
+@dataclass(frozen=True)
+class GridKey:
+    """A grid just created: its ``name`` and its API key, which DNA shows
+    only this once; keep it."""
+
+    name: str
+    api_key: str = field(repr=False)
+
+    @classmethod
+    def from_json(cls, data: dict[str, Any]) -> GridKey:
+        return cls(name=data["name"], api_key=data["api_key"])
 
 
 @dataclass(frozen=True)

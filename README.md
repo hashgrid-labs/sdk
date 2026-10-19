@@ -16,14 +16,21 @@ pip install 'hashgrid[local]'
 `[local]` adds the local embedders, which run on your CPU with no account. To embed with OpenAI or
 Voyage instead, install plain `hashgrid` and use your own key.
 
-You need a DNA API key (`hg-…`), one per grid. No key yet? Write to office@hashgrid.ai.
+Each grid has its own API key (`hg-…`). Creating a grid needs no key:
+
+```python
+from hashgrid.dna import Grid
+
+grid = Grid.create("mine")
+print(grid.key.api_key)   # shown only now: keep it, e.g. as $HASHGRID_API_KEY
+```
 
 ## Add, search, score
 
 ```python
 from hashgrid.dna import Grid
 
-grid = Grid()  # Index() and DNA(), from the environment; the key from $HASHGRID_API_KEY
+grid = Grid()  # Index() and DNA(), from the environment: the key from $HASHGRID_API_KEY
 
 grid.add_many({
     "/cities/lisbon": "Lisbon, a hilly coastal capital",
@@ -44,8 +51,9 @@ grid.score(query, results[1], -0.5)   # a poor one
   is good or bad. Only scores train DNA.
 
 Each `Result` has the item's `id`, `key`, `content` (from the index) and your `score`. `grid.results(query)`
-lists a query's results so far, and `grid.get` and `grid.delete` take an item or its id. `AsyncGrid`
-does the same with `await`.
+lists a query's results so far, and `grid.get` and `grid.delete` take an item or its id.
+`grid.delete_grid()` deletes the whole grid, for good, and its content in the index. `AsyncGrid` does
+the same with `await`.
 
 ## Images
 
@@ -108,7 +116,9 @@ dna.put_edge(query, edge, 1.0)                    # the score
 
 | method | route |
 | --- | --- |
+| `create_grid(name)`, `acreate_grid(name)` (functions, no key) | `POST /` |
 | `get_grid()` | `GET /` |
+| `delete_grid()` | `DELETE /` |
 | `list_nodes(cursor, limit)`, `iter_nodes()` | `GET /nodes` |
 | `get_node(nid)` | `GET /nodes/{nid}` |
 | `create_node(emb, key=None)` | `POST /nodes` |
@@ -148,6 +158,9 @@ With Claude Code:
 claude mcp add hashgrid -e HASHGRID_API_KEY=hg-… -- uvx --from 'hashgrid[local]' hashgrid-mcp
 ```
 
+Without a key, the agent can call `create_grid`: the server makes a grid and saves its key in the
+local index, then uses it from then on.
+
 The tools:
 
 - `add_item(text | image, key?)`: add an item, text or the path of an image file.
@@ -155,13 +168,15 @@ The tools:
 - `more_results(query_id, k, prefix)`: the next ones.
 - `score(query_id, item_id, score)`: score a result.
 - `delete_item(item_id)`: delete an item.
+- `create_grid(name)`: make a grid when the server has no key.
+- `delete_grid(confirm)`: delete the grid, for good; `confirm` is its name.
 
 The first call downloads the local model, about 70 MB. For images, set
 `HASHGRID_EMBEDDER=fastembed:Qdrant/clip-ViT-B-32`.
 
 | variable | default |
 | --- | --- |
-| `HASHGRID_API_KEY` | required |
+| `HASHGRID_API_KEY` | the key `create_grid` saved in the index |
 | `HASHGRID_EMBEDDER` | `fastembed:BAAI/bge-small-en-v1.5`; with `openai:…` or `voyage:…`, plain `uvx --from hashgrid hashgrid-mcp` is enough |
 | `HASHGRID_INDEX` | `~/.hashgrid/index.sqlite` |
 | `HASHGRID_DNA_URL` | `https://dna.hashgrid.ai/api/v1` |

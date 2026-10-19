@@ -11,17 +11,20 @@ from ..errors import (
     NotFound,
     Unauthorized,
 )
-from .client import DEFAULT_URL, UNSET, AsyncDNA, DNA
+from .client import DEFAULT_URL, UNSET, AsyncDNA, DNA, acreate_grid, create_grid
 from .grid import AsyncGrid, Grid
-from .models import Edge, GridInfo, Item, Node, Result
+from .models import Edge, GridInfo, GridKey, Item, Node, Result
 
 __all__ = [
     "Grid",
     "AsyncGrid",
     "Item",
     "Result",
+    "create_grid",
+    "acreate_grid",
     "DNA",
     "AsyncDNA",
+    "GridKey",
     "GridInfo",
     "Node",
     "Edge",

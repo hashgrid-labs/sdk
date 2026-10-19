@@ -3,6 +3,7 @@ embeds on your machine and keeps the content; DNA gets the vectors only.
 
 >>> from hashgrid.dna import Grid
 >>> grid = Grid()                     # Index() and DNA() from the environment
+>>> grid = Grid.create("mine")        # or a new grid; keep grid.key.api_key
 >>> grid.add("Lisbon, a city of seven hills", key="/cities/lisbon")
 >>> query, results = grid.ask("a hilly European capital", k=3)
 >>> grid.score(query, results[0], 1.0)
@@ -17,8 +18,8 @@ from ..errors import Conflict, ModelMismatch
 from ..index import Index
 from ..index.content import Content, content_key, same
 from ..index.embedders import Kind
-from .client import DNA, AsyncDNA, _id
-from .models import Edge, Item, Node, Result
+from .client import DNA, AsyncDNA, _id, acreate_grid, create_grid
+from .models import Edge, GridKey, Item, Node, Result
 
 
 def _pairs(
@@ -76,6 +77,18 @@ class Grid:
     def __init__(self, index: Index | None = None, dna: DNA | None = None):
         self.dna = dna if dna is not None else DNA()
         self._core = _Core(index)
+        self.key: GridKey | None = None
+
+    @classmethod
+    def create(
+        cls, name: str = "hashgrid", index: Index | None = None, *, base_url: str | None = None
+    ) -> Grid:
+        """A new grid, no key needed. Its API key, ``grid.key.api_key``, is
+        shown only now: keep it, to open the grid again with ``DNA(key)``."""
+        key = create_grid(name, base_url=base_url)
+        grid = cls(index, DNA(key.api_key, base_url=base_url))
+        grid.key = key
+        return grid
 
     @property
     def index(self) -> Index:
@@ -159,6 +172,13 @@ class Grid:
         self.dna.delete_node(item)
         core.index.delete(core.name or "", _id(item))
 
+    def delete_grid(self) -> None:
+        """Delete the grid, everything in it and its content in the index, for
+        good; its key stops working."""
+        core = self._open()
+        self.dna.delete_grid()
+        core.index.drop(core.name or "")
+
     def _result(self, edge: Edge) -> Result:
         core = self._open()
         found = core.item(edge.id)
@@ -175,6 +195,16 @@ class AsyncGrid:
         self.dna = dna if dna is not None else AsyncDNA()
         self._core = _Core(index)
         self._lock = asyncio.Lock()
+        self.key: GridKey | None = None
+
+    @classmethod
+    async def create(
+        cls, name: str = "hashgrid", index: Index | None = None, *, base_url: str | None = None
+    ) -> AsyncGrid:
+        key = await acreate_grid(name, base_url=base_url)
+        grid = cls(index, AsyncDNA(key.api_key, base_url=base_url))
+        grid.key = key
+        return grid
 
     @property
     def index(self) -> Index:
@@ -251,6 +281,11 @@ class AsyncGrid:
         core = await self._open()
         await self.dna.delete_node(item)
         core.index.delete(core.name or "", _id(item))
+
+    async def delete_grid(self) -> None:
+        core = await self._open()
+        await self.dna.delete_grid()
+        core.index.drop(core.name or "")
 
     async def _result(self, edge: Edge) -> Result:
         core = await self._open()

@@ -119,3 +119,32 @@ async def test_async(fake, tmp_path):
     assert (await grid.get(items[0])).content == DOCS["/cities/lisbon"]
     await grid.delete(items[0])
     assert items[0].id not in fake.nodes
+
+
+def test_create_and_delete_grid(fake, monkeypatch, tmp_path):
+    from hashgrid.dna import client
+
+    real = client.httpx.Client
+
+    def mocked(*a, **k):  # Grid.create builds its own clients
+        k["transport"] = fake.transport()
+        return real(*a, **k)
+
+    monkeypatch.setattr(client.httpx, "Client", mocked)
+    index = Index(HashEmbedder(), path=tmp_path / "i.sqlite")
+    grid = Grid.create("mine", index, base_url=URL)
+    assert grid.key.name == "mine" and grid.key.api_key in fake.grids
+    item = grid.add("hello")
+    name = grid._core.name
+    assert index.get(name, item.id) == (item.key, "hello")
+    grid.delete_grid()
+    assert grid.key.api_key not in fake.grids
+    assert index.get(name, item.id) is None
+
+
+@pytest.mark.anyio
+async def test_async_delete_grid(fake):
+    grid = AsyncGrid(Index(HashEmbedder(), path=":memory:"), AsyncDNA(KEY, base_url=URL, transport=fake.transport()))
+    item = await grid.add("x")
+    await grid.delete_grid()
+    assert KEY not in fake.grids and grid.index.get(grid._core.name, item.id) is None
