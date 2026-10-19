@@ -1,0 +1,67 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "ai.hashgrid/sdk",
+  "title": "Hashgrid DNA (text, local)",
+  "description": "Search that learns from feedback, over text: embeds locally, sends DNA only vectors.",
+  "websiteUrl": "https://dna.hashgrid.ai",
+  "repository": {
+    "url": "https://github.com/hashgrid-labs/sdk",
+    "source": "github"
+  },
+  "version": "1.0.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "hashgrid",
+      "version": "1.0.0",
+      "runtimeHint": "uvx",
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "--with",
+          "value": "fastembed>=0.7",
+          "description": "The local embedder, the default"
+        }
+      ],
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp"
+        }
+      ],
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "HASHGRID_API_KEY",
+          "description": "Your DNA API key, hg-…. No key yet? Write to office@hashgrid.ai.",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "HASHGRID_EMBEDDER",
+          "description": "The embedder, one per grid: fastembed:<model> (local), openai:<model> or voyage:<model>.",
+          "default": "fastembed:BAAI/bge-small-en-v1.5"
+        },
+        {
+          "name": "OPENAI_API_KEY",
+          "description": "For an openai:<model> embedder.",
+          "isSecret": true
+        },
+        {
+          "name": "VOYAGE_API_KEY",
+          "description": "For a voyage:<model> embedder.",
+          "isSecret": true
+        },
+        {
+          "name": "HASHGRID_INDEX",
+          "description": "The local index: a sqlite file that maps DNA ids to your text.",
+          "format": "filepath",
+          "default": "~/.hashgrid/index.sqlite"
+        }
+      ]
+    }
+  ]
+}

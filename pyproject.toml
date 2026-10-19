@@ -1,0 +1,49 @@
+[project]
+name = "hashgrid"
+version = "1.0.0"
+description = "Client for Hashgrid DNA, a search engine that learns from feedback: text is embedded on your machine, only vectors are sent."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "Hashgrid", email = "office@hashgrid.ai" }]
+keywords = ["search", "embeddings", "feedback", "mcp", "hashgrid", "dna"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+dependencies = [
+    "httpx>=0.27",
+    "mcp>=2.3,<3",
+]
+
+[project.optional-dependencies]
+# The local embedder, the default: no account, runs on CPU.
+local = ["fastembed>=0.7"]
+
+[project.urls]
+Homepage = "https://dna.hashgrid.ai"
+Documentation = "https://dna.hashgrid.ai/docs"
+Repository = "https://github.com/hashgrid-labs/sdk"
+
+[project.scripts]
+hashgrid = "hashgrid.cli:main"
+hashgrid-mcp = "hashgrid.mcp_server:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "anyio>=4"]
+
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hashgrid"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/hashgrid", "tests", "README.md", "LICENSE", "server.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
