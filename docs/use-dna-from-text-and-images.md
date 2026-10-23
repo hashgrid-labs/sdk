@@ -17,8 +17,8 @@ pip install 'hashgrid[local]'
 ```python
 from hashgrid.dna import Grid
 
-grid = Grid.create("mine")
-print(grid.key.api_key)
+grid, api_key = Grid.create("mine")
+print(api_key)
 ```
 
 No key is needed to create one. The grid's API key is shown only now: keep it, for example as

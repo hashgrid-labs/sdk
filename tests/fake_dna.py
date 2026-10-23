@@ -69,14 +69,15 @@ class FakeDNA:
                 return self._reply(422, {"detail": "name must be 1 to 256 characters"})
             key = f"hg-new{next(self._keys)}"
             self.grids[key] = _Grid(name)
-            return self._reply(201, {"name": name, "api_key": key})
+            self.grids[key].max_nodes = 1024
+            return self._reply(201, {"name": name, "api_key": key, "max_nodes": 1024})
         auth = request.headers.get("authorization", "")
         grid = self.grids.get(auth.removeprefix("Bearer "))
         if grid is None:
             return self._reply(401, {"detail": "Invalid API key"})
         self._grid = grid
         if path == "/" and m == "GET":
-            return self._reply(200, {"name": grid.name})
+            return self._reply(200, {"name": grid.name, "max_nodes": getattr(grid, "max_nodes", None)})
         if path == "/" and m == "DELETE":
             del self.grids[auth.removeprefix("Bearer ")]
             return self._reply(204)

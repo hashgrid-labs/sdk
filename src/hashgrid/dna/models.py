@@ -11,26 +11,30 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class GridInfo:
-    """The grid an API key opens."""
+    """The grid an API key opens: its ``name``, and the most nodes it holds,
+    ``max_nodes`` (``None``: no limit)."""
 
     name: str
+    max_nodes: int | None = None
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> GridInfo:
-        return cls(name=data["name"])
+        return cls(name=data["name"], max_nodes=data.get("max_nodes"))
 
 
 @dataclass(frozen=True)
 class GridKey:
-    """A grid just created: its ``name`` and its API key, which DNA shows
-    only this once; keep it."""
+    """A grid just created: its ``name``, its API key, which DNA shows only
+    this once (keep it), and the most nodes it holds, ``max_nodes``
+    (``None``: no limit)."""
 
     name: str
     api_key: str = field(repr=False)
+    max_nodes: int | None = None
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> GridKey:
-        return cls(name=data["name"], api_key=data["api_key"])
+        return cls(name=data["name"], api_key=data["api_key"], max_nodes=data.get("max_nodes"))
 
 
 @dataclass(frozen=True)

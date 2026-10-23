@@ -3,7 +3,7 @@ embeds on your machine and keeps the content; DNA gets the vectors only.
 
 >>> from hashgrid.dna import Grid
 >>> grid = Grid()                     # Index() and DNA() from the environment
->>> grid = Grid.create("mine")        # or a new grid; keep grid.key.api_key
+>>> grid, api_key = Grid.create("mine")  # or a new grid; keep its key
 >>> grid.add("Lisbon, a city of seven hills", key="/cities/lisbon")
 >>> query, results = grid.ask("a hilly European capital", k=3)
 >>> grid.score(query, results[0], 1.0)
@@ -20,7 +20,7 @@ from ..index import Index
 from ..index.content import Content, content_key, same
 from ..index.embedders import Kind
 from .client import DNA, AsyncDNA, _id, acreate_grid, create_grid
-from .models import Edge, GridKey, Item, Node, Result
+from .models import Edge, Item, Node, Result
 
 
 WAIT = 0.5  # how long a search waits for items DNA has not indexed yet, in seconds
@@ -92,18 +92,15 @@ class Grid:
     def __init__(self, index: Index | None = None, dna: DNA | None = None):
         self.dna = dna if dna is not None else DNA()
         self._core = _Core(index)
-        self.key: GridKey | None = None
 
     @classmethod
     def create(
         cls, name: str = "hashgrid", index: Index | None = None, *, base_url: str | None = None
-    ) -> Grid:
-        """A new grid, no key needed. Its API key, ``grid.key.api_key``, is
-        shown only now: keep it, to open the grid again with ``DNA(key)``."""
+    ) -> tuple[Grid, str]:
+        """A new grid, no key needed, and its API key, shown only now: keep
+        it, to open the grid again with ``DNA(key)``."""
         key = create_grid(name, base_url=base_url)
-        grid = cls(index, DNA(key.api_key, base_url=base_url))
-        grid.key = key
-        return grid
+        return cls(index, DNA(key.api_key, base_url=base_url)), key.api_key
 
     @property
     def index(self) -> Index:
@@ -221,16 +218,13 @@ class AsyncGrid:
         self.dna = dna if dna is not None else AsyncDNA()
         self._core = _Core(index)
         self._lock = asyncio.Lock()
-        self.key: GridKey | None = None
 
     @classmethod
     async def create(
         cls, name: str = "hashgrid", index: Index | None = None, *, base_url: str | None = None
-    ) -> AsyncGrid:
+    ) -> tuple[AsyncGrid, str]:
         key = await acreate_grid(name, base_url=base_url)
-        grid = cls(index, AsyncDNA(key.api_key, base_url=base_url))
-        grid.key = key
-        return grid
+        return cls(index, AsyncDNA(key.api_key, base_url=base_url)), key.api_key
 
     @property
     def index(self) -> Index:

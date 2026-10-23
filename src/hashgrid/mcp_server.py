@@ -216,7 +216,11 @@ def build_server(local: Local | None = None) -> MCPServer:
         """Create a DNA grid for this server, when it has none (no key needed): its API key is saved in the
         local index, and the other tools use it from then on."""
         key = await local.create(name)
-        return {"name": key.name, "saved_in": str(local.index.path if local.index else "")}
+        return {
+            "name": key.name,
+            "max_nodes": key.max_nodes,
+            "saved_in": str(local.index.path if local.index else ""),
+        }
 
     @tool
     async def delete_grid(confirm: str) -> str:

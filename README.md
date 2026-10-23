@@ -21,9 +21,12 @@ Each grid has its own API key (`hg-…`). Creating a grid needs no key:
 ```python
 from hashgrid.dna import Grid
 
-grid = Grid.create("mine")
-print(grid.key.api_key)   # shown only now: keep it, e.g. as $HASHGRID_API_KEY
+grid, api_key = Grid.create("mine")
+print(api_key)   # shown only now: keep it, e.g. as $HASHGRID_API_KEY
 ```
+
+A grid created this way holds up to 1024 items and queries (`grid.dna.get_grid().max_nodes`), and each
+address can create a few grids a day. Need more? Write to office@hashgrid.ai.
 
 ## Add, search, score
 
@@ -132,8 +135,9 @@ dna.put_edge(query, edge, 1.0)                    # the score
 | `delete_edge(nid, eid)` | `DELETE /nodes/{nid}/edges/{eid}` |
 
 Ids are 16-character hex strings. A method also takes the `Node` or `Edge` itself. Errors are
-`Unauthorized` (401), `NotFound` (404), `Conflict` (409, the key is taken) and `Invalid` (422), all
-subclasses of `DNAError`.
+`Unauthorized` (401), `Forbidden` (403: the grid holds its node limit, or is frozen), `NotFound`
+(404), `Conflict` (409, the key is taken), `Invalid` (422) and `TooManyRequests` (429: too many grids
+created from your address; try later), all subclasses of `DNAError`.
 
 ## MCP server
 

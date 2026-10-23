@@ -21,7 +21,8 @@ class Unauthorized(DNAError):
 
 
 class Forbidden(DNAError):
-    """403."""
+    """403: the grid holds its node limit, or it is frozen, or this address
+    may not create grids."""
 
 
 class NotFound(DNAError):
@@ -30,6 +31,11 @@ class NotFound(DNAError):
 
 class Conflict(DNAError):
     """409: the key is taken by another node."""
+
+
+class TooManyRequests(DNAError):
+    """429: this address, or every address together, has created its share
+    of grids for now; try again later."""
 
 
 class Invalid(DNAError):
@@ -47,6 +53,7 @@ _BY_STATUS: dict[int, type[DNAError]] = {
     404: NotFound,
     409: Conflict,
     422: Invalid,
+    429: TooManyRequests,
 }
 
 

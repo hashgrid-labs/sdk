@@ -143,10 +143,10 @@ async def test_async(fake):
 
 def test_create_and_delete_grid(fake):
     key = create_grid("mine", base_url=URL, transport=fake.transport())
-    assert key == GridKey("mine", "hg-new1") and "hg-new1" not in repr(key)
+    assert key == GridKey("mine", "hg-new1", max_nodes=1024) and "hg-new1" not in repr(key)
     assert "authorization" not in fake.requests[-1].headers  # no key needed
     dna = DNA(key.api_key, base_url=URL, transport=fake.transport())
-    assert dna.get_grid() == GridInfo("mine")
+    assert dna.get_grid() == GridInfo("mine", max_nodes=1024)
     dna.create_node([1.0], key="/a")
     dna.delete_grid()
     assert "hg-new1" not in fake.grids
@@ -164,3 +164,14 @@ async def test_async_create_and_delete_grid(fake):
         assert (await dna.get_grid()).name == "mine"
         await dna.delete_grid()
     assert key.api_key not in fake.grids
+
+
+def test_errors_by_status():
+    from hashgrid.dna import DNAError, Forbidden, TooManyRequests
+    from hashgrid.errors import error_for
+
+    limited = error_for(429, "Too many grids created; try again later")
+    assert isinstance(limited, TooManyRequests) and isinstance(limited, DNAError)
+    assert limited.status == 429 and "try again later" in str(limited)
+    assert isinstance(error_for(403, "This grid holds its limit of 1024 nodes"), Forbidden)
+    assert type(error_for(418, "teapot")) is DNAError

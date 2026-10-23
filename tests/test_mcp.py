@@ -146,7 +146,7 @@ async def test_no_key_then_create_grid(fake, index_path, monkeypatch):
         msg = await error(client, "add_item", text="x")
         assert "create_grid" in msg and "HASHGRID_API_KEY" in msg
         made = await call(client, "create_grid", name="mine")
-        assert made == {"name": "mine", "saved_in": str(index_path)}
+        assert made == {"name": "mine", "max_nodes": 1024, "saved_in": str(index_path)}
         assert "api_key" not in made  # kept in the index, not shown to the agent
         assert "has a grid already" in await error(client, "create_grid")
         item = await call(client, "add_item", text="hello")

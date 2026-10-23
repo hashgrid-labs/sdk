@@ -132,13 +132,13 @@ def test_create_and_delete_grid(fake, monkeypatch, tmp_path):
 
     monkeypatch.setattr(client.httpx, "Client", mocked)
     index = Index(HashEmbedder(), path=tmp_path / "i.sqlite")
-    grid = Grid.create("mine", index, base_url=URL)
-    assert grid.key.name == "mine" and grid.key.api_key in fake.grids
+    grid, api_key = Grid.create("mine", index, base_url=URL)
+    assert fake.grids[api_key].name == "mine"
     item = grid.add("hello")
     name = grid._core.name
     assert index.get(name, item.id) == (item.key, "hello")
     grid.delete_grid()
-    assert grid.key.api_key not in fake.grids
+    assert api_key not in fake.grids
     assert index.get(name, item.id) is None
 
 

@@ -9,6 +9,7 @@ from ..errors import (
     Invalid,
     ModelMismatch,
     NotFound,
+    TooManyRequests,
     Unauthorized,
 )
 from .client import DEFAULT_URL, UNSET, AsyncDNA, DNA, acreate_grid, create_grid
@@ -34,6 +35,7 @@ __all__ = [
     "NotFound",
     "Conflict",
     "Invalid",
+    "TooManyRequests",
     "ModelMismatch",
     "UNSET",
     "DEFAULT_URL",
