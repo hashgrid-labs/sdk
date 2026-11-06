@@ -1,15 +1,14 @@
-"""An in-memory DNA behind an ``httpx.MockTransport``: the routes and their
-statuses as the real API answers them; search ranks by dot product, plus the
-scores given."""
+"""An in-memory DNA behind an ``httpx.MockTransport``: items, queries and
+grades, with the statuses the real API answers. Results rank by grade, then
+by key; that is all the client needs to see."""
 
 from __future__ import annotations
 
 import hashlib
 import itertools
 import json
-import math
-import re
 from typing import Any
+from urllib.parse import unquote
 
 import httpx
 
@@ -17,169 +16,115 @@ KEY = "hg-test"
 URL = "https://dna.test/api/v1"
 
 
-class _Grid:
-    def __init__(self, name: str):
-        self.name = name
-        self.nodes: dict[str, dict[str, Any]] = {}
-        self.edges: dict[tuple[str, str], float | None] = {}
+def _type(request: httpx.Request) -> str:
+    mime = request.headers.get("content-type", "").partition(";")[0]
+    if mime:
+        return mime
+    body = request.content
+    return "image/png" if body.startswith(b"\x89PNG") else "text/plain"
 
 
 class FakeDNA:
-    """Grids by API key; ``KEY`` opens the first, ``POST /`` makes more."""
-
-    def __init__(self, name: str = "test"):
-        self.grids: dict[str, _Grid] = {KEY: _Grid(name)}
+    def __init__(self) -> None:
+        self.keys = {KEY}
+        self.items: dict[str, dict[str, Any]] = {}
+        self.queries: dict[str, dict[str, Any]] = {}
+        self.grades: dict[tuple[str, str], float] = {}
         self.requests: list[httpx.Request] = []
         self._ids = itertools.count(1)
-        self._keys = itertools.count(1)
-        self._grid = self.grids[KEY]
-        self.lag = 0  # searches that miss a node after it is added, as before a tick
-        self._unticked: dict[str, int] = {}
-
-    @property
-    def nodes(self) -> dict[str, dict[str, Any]]:
-        return self._grid.nodes
-
-    @nodes.setter
-    def nodes(self, value: dict[str, dict[str, Any]]) -> None:
-        self._grid.nodes = value
-
-    @property
-    def edges(self) -> dict[tuple[str, str], float | None]:
-        return self._grid.edges
-
-    @edges.setter
-    def edges(self, value: dict[tuple[str, str], float | None]) -> None:
-        self._grid.edges = value
 
     def transport(self) -> httpx.MockTransport:
-        return httpx.MockTransport(self.handle)
+        return httpx.MockTransport(self.handle)  # serves sync and async clients alike
 
-    def _reply(self, status: int, body: Any = None) -> httpx.Response:
-        return httpx.Response(status, json=body) if body is not None else httpx.Response(status)
+    def _content(self, request: httpx.Request) -> dict[str, Any]:
+        body = request.content
+        return {"type": _type(request), "size": len(body), "etag": hashlib.sha256(body).hexdigest()[:16],
+                "ctime": 1, "mtime": 1, "body": body}
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
-        path = request.url.path.removeprefix("/api/v1")
-        body = json.loads(request.content) if request.content else {}
-        m, q = request.method, request.url.params
-        if path == "/" and m == "POST":  # no key needed
-            name = body.get("name", "hashgrid")
-            if not 1 <= len(name) <= 256:
-                return self._reply(422, {"detail": "name must be 1 to 256 characters"})
-            key = f"hg-new{next(self._keys)}"
-            self.grids[key] = _Grid(name)
-            self.grids[key].max_nodes = 1024
-            return self._reply(201, {"name": name, "api_key": key, "max_nodes": 1024})
-        auth = request.headers.get("authorization", "")
-        grid = self.grids.get(auth.removeprefix("Bearer "))
-        if grid is None:
-            return self._reply(401, {"detail": "Invalid API key"})
-        self._grid = grid
-        if path == "/" and m == "GET":
-            return self._reply(200, {"name": grid.name, "max_nodes": getattr(grid, "max_nodes", None)})
-        if path == "/" and m == "DELETE":
-            del self.grids[auth.removeprefix("Bearer ")]
-            return self._reply(204)
-        if path == "/nodes" and m == "GET":
-            ids = sorted(i for i in self.nodes if i > q.get("cursor", ""))
-            return self._reply(200, [self.nodes[i] for i in ids[: int(q.get("limit", 32))]])
-        if path == "/nodes" and m == "POST":
-            emb, key = body.get("emb"), body.get("key")
-            if not emb or len(emb) > 2048 or not all(math.isfinite(x) for x in emb):
-                return self._reply(422, {"detail": "Node embedding must have 1 to 2048 values"})
-            if key and any(n["key"] == key for n in self.nodes.values()):
-                return self._reply(409, {"detail": "Resource already exists"})
-            nid = f"{next(self._ids):016x}"
-            self.nodes[nid] = {"id": nid, "key": key, "emb": emb}
-            if self.lag:
-                self._unticked[nid] = self.lag
-            return self._reply(201, self.nodes[nid])
-        if mt := re.fullmatch(r"/nodes/([0-9a-f]{16})", path):
-            nid = mt[1]
-            if nid not in self.nodes:
-                return self._reply(404, {"detail": "Resource not found"})
-            if m == "GET":
-                return self._reply(200, self.nodes[nid])
-            if m == "PATCH":
-                if "key" in body:
-                    self.nodes[nid]["key"] = body["key"]
-                if "emb" in body:
-                    self.nodes[nid]["emb"] = body["emb"]
-                return self._reply(200, self.nodes[nid])
-            if m == "DELETE":
-                del self.nodes[nid]
-                self.edges = {p: s for p, s in self.edges.items() if nid not in p}
-                return self._reply(204)
-        if mt := re.fullmatch(r"/nodes/([0-9a-f]{16})/edges", path):
-            nid = mt[1]
-            if nid not in self.nodes:
-                return self._reply(404, {"detail": "Resource not found"})
-            if m == "GET":
-                peers = sorted(p for (a, p) in self.edges if a == nid and p > q.get("cursor", ""))
-                page = peers[: int(q.get("limit", 32))]
-                return self._reply(200, [{"id": p, "score": self.edges[nid, p]} for p in page])
-            if m == "POST":
-                return self._search(nid, body.get("prefix", ""))
-        if mt := re.fullmatch(r"/nodes/([0-9a-f]{16})/edges/([0-9a-f]{16})", path):
-            nid, eid = mt[1], mt[2]
-            if m == "GET":
-                if (nid, eid) not in self.edges:
-                    return self._reply(404, {"detail": "Resource not found"})
-                return self._reply(200, {"id": eid, "score": self.edges[nid, eid]})
-            if nid not in self.nodes or eid not in self.nodes:
-                return self._reply(404, {"detail": "Resource not found"})
-            if m in ("PUT", "PATCH"):
-                if m == "PATCH" and (nid, eid) not in self.edges:
-                    return self._reply(404, {"detail": "Resource not found"})
-                created = (nid, eid) not in self.edges
-                score = round(max(-1.0, min(1.0, body["score"])), 4)
-                self.edges[nid, eid] = score
-                return self._reply(201 if created and m == "PUT" else 200, {"id": eid, "score": score})
-            if m == "DELETE":
-                if self.edges.pop((nid, eid), "gone") == "gone":
-                    return self._reply(404, {"detail": "Resource not found"})
-                return self._reply(204)
-        return self._reply(404, {"detail": "Not Found"})
+        path = unquote(request.url.path.removeprefix("/api/v1"))
+        method = request.method
+        if method == "POST" and path == "/":
+            key = f"hg-{next(self._ids)}"
+            self.keys.add(key)
+            return httpx.Response(201, json={"name": json.loads(request.content)["name"], "api_key": key,
+                                             "max_items": 1024, "embedder": "nomic-v1.5"})
+        if request.headers.get("authorization") not in {f"Bearer {k}" for k in self.keys}:
+            return httpx.Response(401, json={"detail": "Invalid API key"})
+        if path == "/":
+            if method == "GET":
+                return httpx.Response(200, json={"name": "test", "max_items": 1024, "embedder": "nomic-v1.5"})
+            self.keys.discard(request.headers["authorization"].removeprefix("Bearer "))
+            return httpx.Response(204)
+        if path == "/items":
+            prefix, after = request.url.params.get("prefix", ""), request.url.params.get("after")
+            limit = int(request.url.params.get("limit", 32))
+            keys = [k for k in sorted(self.items) if k.startswith(prefix) and (after is None or k > after)]
+            page = keys[:limit]
+            return httpx.Response(200, json={"items": [self._meta(k) for k in page],
+                                             "next": page[-1] if len(keys) > limit else None})
+        if path.startswith("/items/"):
+            return self._item(request, path.removeprefix("/items/"))
+        if method == "POST" and path == "/queries":
+            qid = f"{next(self._ids):016x}"
+            self.queries[qid] = self._content(request)
+            q = self.queries[qid]
+            return httpx.Response(201, json={"id": qid, "type": q["type"], "size": q["size"], "etag": q["etag"],
+                                             "ctime": 1})
+        parts = path.removeprefix("/queries/").split("/", 2)
+        qid = parts[0]
+        if qid not in self.queries:
+            return httpx.Response(404, json={"detail": "Not found"})
+        if len(parts) == 1:
+            self.queries.pop(qid)
+            return httpx.Response(204)
+        if parts[1] == "results":
+            prefixes = request.url.params.get_list("prefix") or [""]
+            ungraded = request.url.params.get("ungraded") == "true"
+            keys = [k for k in self.items if any(k.startswith(p) for p in prefixes)
+                    and not (ungraded and (qid, k) in self.grades)]
+            keys.sort(key=lambda k: (-self.grades.get((qid, k), 0.0), k))
+            limit = int(request.url.params.get("limit", 32))
+            return httpx.Response(200, json={"results": [self._meta(k) | {"score": self.grades.get((qid, k), 0.0)}
+                                                         for k in keys[:limit]]})
+        if len(parts) == 2:
+            return httpx.Response(200, json={"grades": [{"key": k, "score": s} for (q, k), s
+                                                        in sorted(self.grades.items()) if q == qid]})
+        key = parts[2]
+        if key not in self.items:
+            return httpx.Response(404, json={"detail": f"No item at {key}"})
+        if method == "PUT":
+            score = max(-1.0, min(1.0, json.loads(request.content)["score"]))
+            created = (qid, key) not in self.grades
+            self.grades[qid, key] = score
+            return httpx.Response(201 if created else 200, json={"key": key, "score": score})
+        if (qid, key) not in self.grades:
+            return httpx.Response(404, json={"detail": "Not found"})
+        self.grades.pop((qid, key))
+        return httpx.Response(204)
 
-    def _search(self, nid: str, prefix: str) -> httpx.Response:
-        src = self.nodes[nid]["emb"]
-        best = None
-        for pid, n in self.nodes.items():
-            if pid == nid or not n["key"] or not n["key"].startswith(prefix):
-                continue
-            if (nid, pid) in self.edges or len(n["emb"]) != len(src):
-                continue
-            if self._unticked.get(pid):
-                self._unticked[pid] -= 1
-                continue
-            s = sum(a * b for a, b in zip(src, n["emb"]))
-            if best is None or s > best[0]:
-                best = (s, pid)
-        if best is None:
-            return self._reply(400, {"detail": "Failed to create edge. Try again later."})
-        self.edges[nid, best[1]] = None
-        return self._reply(201, {"id": best[1], "score": None})
+    def _meta(self, key: str) -> dict[str, Any]:
+        return {"key": key} | {k: v for k, v in self.items[key].items() if k != "body"}
 
-
-class HashEmbedder:
-    """A deterministic bag-of-words embedder, unit length. An image is
-    embedded by the words in its bytes, so a test image of b"a cat" is found
-    by the text "cat"."""
-
-    def __init__(self, dim: int = 64, spec: str | None = None, images: bool = True):
-        self.dim = dim
-        self.spec = spec or f"test:hash@{dim}"
-        self.modalities = frozenset({"text", "image"} if images else {"text"})
-        self.calls: list[tuple[str, list]] = []
-
-    def _one(self, text: str) -> list[float]:
-        v = [0.0] * self.dim
-        for w in re.findall(r"\w+", text.lower()):
-            v[int(hashlib.md5(w.encode()).hexdigest(), 16) % self.dim] += 1.0
-        n = math.sqrt(sum(x * x for x in v)) or 1.0
-        return [x / n for x in v]
-
-    def embed(self, contents, kind):
-        self.calls.append((kind, list(contents)))
-        return [self._one(c if isinstance(c, str) else c.read().decode("latin-1")) for c in contents]
+    def _item(self, request: httpx.Request, key: str) -> httpx.Response:
+        found = self.items.get(key)
+        if request.method == "PUT":
+            etag = found and found["etag"]
+            if ("if-none-match" in request.headers and found) or (
+                "if-match" in request.headers and request.headers["if-match"].strip('"') != etag
+            ):
+                return httpx.Response(412, json={"detail": "Precondition failed"})
+            if len(request.content) > 8192 and _type(request) == "text/plain":
+                return httpx.Response(413, json={"detail": "Text is at most 8192 bytes"})
+            self.items[key] = self._content(request)
+            return httpx.Response(200 if found else 201, json=self._meta(key))
+        if found is None:
+            return httpx.Response(404, json={"detail": "Not found"})
+        if request.method == "GET":
+            mime = found["type"] + ("; charset=utf-8" if found["type"] == "text/plain" else "")
+            return httpx.Response(200, content=found["body"], headers={"content-type": mime})
+        self.items.pop(key)
+        for pair in [p for p in self.grades if p[1] == key]:
+            self.grades.pop(pair)
+        return httpx.Response(204)

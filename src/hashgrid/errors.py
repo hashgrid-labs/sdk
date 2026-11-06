@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-GET_A_KEY = "No key yet? Create a grid, no key needed: hashgrid.dna.create_grid() returns its key."
+GET_A_KEY = "No key yet? DNA.signup() makes a grid, no key needed, and returns its key."
 
 
 class DNAError(Exception):
@@ -21,37 +21,40 @@ class Unauthorized(DNAError):
 
 
 class Forbidden(DNAError):
-    """403: the grid holds its node limit, or it is frozen, or this address
-    may not create grids."""
+    """403: the grid holds its item limit, or it is frozen."""
 
 
 class NotFound(DNAError):
-    """404: no such node or edge."""
+    """404: no such item, query or grade."""
 
 
-class Conflict(DNAError):
-    """409: the key is taken by another node."""
+class PreconditionFailed(DNAError):
+    """412: ``if_match`` or ``if_none_match`` did not hold."""
 
 
-class TooManyRequests(DNAError):
-    """429: this address, or every address together, has created its share
-    of grids for now; try again later."""
+class TooLarge(DNAError):
+    """413: text or a record over 8 KB, or an image over 3 MB or 40 MP."""
+
+
+class UnsupportedType(DNAError):
+    """415: a content type DNA does not take."""
 
 
 class Invalid(DNAError):
-    """422: a malformed request, e.g. an embedding longer than 2048 values."""
+    """422: content that is not of its type, or a malformed request."""
 
 
-class ModelMismatch(Exception):
-    """An embedder that does not fit the grid: its vectors have another
-    length than the grid's, or another model is recorded for it."""
+class TooManyRequests(DNAError):
+    """429: this address has created its share of grids for now; try later."""
 
 
 _BY_STATUS: dict[int, type[DNAError]] = {
     401: Unauthorized,
     403: Forbidden,
     404: NotFound,
-    409: Conflict,
+    412: PreconditionFailed,
+    413: TooLarge,
+    415: UnsupportedType,
     422: Invalid,
     429: TooManyRequests,
 }
