@@ -15,12 +15,11 @@ def _from(cls: type[T], data: dict[str, Any]) -> T:
 
 @dataclass(frozen=True)
 class GridInfo:
-    """The grid an API key opens: its ``name``, the most items it holds,
-    ``max_items`` (``None``: no limit), and its ``embedder``."""
+    """The grid an API key opens: its ``name``, and the most items it holds,
+    ``max_items`` (``None``: no limit)."""
 
     name: str
     max_items: int | None = None
-    embedder: str = ""
 
 
 @dataclass(frozen=True)

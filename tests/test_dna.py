@@ -109,7 +109,7 @@ def test_signup_info_delete(fake):
     api_key = DNA.signup("mine", base_url=URL, transport=fake.transport())
     assert api_key.startswith("hg-")
     dna = DNA(api_key, base_url=URL, transport=fake.transport())
-    assert dna.info() == GridInfo("test", 1024, "nomic-v1.5")
+    assert dna.info() == GridInfo("test", 1024)
     dna.delete_grid()
     with pytest.raises(Unauthorized, match="DNA.signup"):
         dna.info()

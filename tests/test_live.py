@@ -18,7 +18,7 @@ COASTAL = set(CITIES[:8])
 def test_live_flow():
     dna = DNA(DNA.signup("sdk-live-test"))
     try:
-        assert dna.info().embedder
+        assert dna.info().max_items
         dna.put_many({f"cities/{c}": c for c in CITIES})
         assert dna.put("records/1", {"name": "Lisbon"}).type == "application/json"
         assert dna.get("records/1") == {"name": "Lisbon"}

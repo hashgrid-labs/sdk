@@ -49,12 +49,12 @@ class FakeDNA:
             key = f"hg-{next(self._ids)}"
             self.keys.add(key)
             return httpx.Response(201, json={"name": json.loads(request.content)["name"], "api_key": key,
-                                             "max_items": 1024, "embedder": "nomic-v1.5"})
+                                             "max_items": 1024})
         if request.headers.get("authorization") not in {f"Bearer {k}" for k in self.keys}:
             return httpx.Response(401, json={"detail": "Invalid API key"})
         if path == "/":
             if method == "GET":
-                return httpx.Response(200, json={"name": "test", "max_items": 1024, "embedder": "nomic-v1.5"})
+                return httpx.Response(200, json={"name": "test", "max_items": 1024})
             self.keys.discard(request.headers["authorization"].removeprefix("Bearer "))
             return httpx.Response(204)
         if path == "/items":

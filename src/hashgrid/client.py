@@ -226,7 +226,7 @@ class DNA:
         self.close()
 
     def info(self) -> GridInfo:
-        """``GET /``: the grid's name, item limit and embedder."""
+        """``GET /``: the grid's name and item limit."""
         return _routes.info().send(self._http)
 
     def delete_grid(self) -> None:
